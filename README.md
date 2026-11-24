@@ -152,27 +152,26 @@ Files/
 
 ## 12. Ejecución
 
-La ejecución del framework se centralizará mediante un notebook transversal:
+El notebook operativo transversal está en:
 
-`nb_create_canonical_model`
+`notebooks/nb_create_canonical_model.ipynb`
 
-Este notebook invocará el motor de construcción y permitirá seleccionar las entidades y estrategias de procesamiento.
+En Fabric, instala el wheel, adjunta el Lakehouse que contiene `Files/CanonicalModel/config/` y ejecuta el notebook completo. En uso normal solo se ajusta su celda `PARÁMETROS`: Lakehouse/config root, entidad opcional, modo opcional y modo PRECHECK o escritura. Los detalles de cada entidad permanecen en los YAML.
 
 ## 12.1. Notebooks de ejemplo
 
-Hay tres notebooks en `examples/notebooks/`:
+Los notebooks auxiliares están en `examples/notebooks/` y no son necesarios para una ejecución normal:
 
 - `nb_framework_components_demo.ipynb`: utiliza datos sintéticos para probar mapping, resolución, transformaciones y validaciones sin leer ni escribir tablas del Lakehouse.
-- `nb_execute_registered_entities.ipynb`: carga framework y registry desde el Lakehouse adjunto, ejecuta un precheck ilustrativo y muestra cómo conectar las entidades habilitadas al motor. La ejecución de escritura está protegida por `RUN_EXECUTION = False`.
 - `nb_fabric_integration_tests.ipynb`: ejecuta pruebas Delta de `FULL_LOAD`, `UPSERT`, `SCD2`, auditoría y watermarks en un schema de prueba único. Deja las tablas de prueba para su inspección y limpieza manual.
 
-Instale el wheel en el Environment de Fabric y adjunte el Lakehouse que contiene `Files/CanonicalModel/config/` antes de abrir los ejemplos. El notebook de ejecución requiere YAML de entidad completos y tablas Curated existentes. Es una plantilla basada en las interfaces actuales; lee las fuentes completas y no implementa watermarks ni procesamiento incremental. Su precheck no sustituye la validación central de configuraciones requerida para producción.
+El notebook operativo hace precheck físico y luego usa los componentes existentes para leer, mapear, resolver, validar y persistir. **Limitación actual:** aunque los YAML declaren watermarks, esta versión lee las fuentes completas y no aplica procesamiento incremental. El precheck del notebook tampoco sustituye un validador central JSON Schema completo.
 
 Las pruebas unitarias disponibles se ejecutan desde la raíz del repositorio con `python -m unittest discover -s tests -v`. Las pruebas Delta requieren ejecutar el notebook de integración en Fabric; no modifican ni eliminan tablas de negocio.
 
 ## 12.2. Ejemplo de entidad `pozo`
 
-La configuración de ejemplo está en `entities/pozo.yml` y usa las hojas compartidas como fuentes `AVM` (`avm_pozos_ubicacion`) y `BDP` (`bdp_well`), con `uwi` como clave y `fecha_actualizacion` como watermark independiente por fuente. `Well_Name` se resuelve en orden AVM y luego BDP. Al desplegarla, ubíquela en `Files/CanonicalModel/config/entities/pozo.yml`, junto con el `registry.yml`.
+La configuración de ejemplo está en `entities/pozo.yml` y usa las hojas compartidas como fuentes `AVM` (`avm_pozos_ubicacion`) y `BDP` (`bdp_well`), con `uwi` como clave y `fecha_actualizacion` como watermark independiente por fuente. `Well_Name` se resuelve en orden AVM y luego BDP. Al desplegarla en el Lakehouse de esta implementación, ubícala en `Files/CanonicalModel/config/entities/pozo.yml`, junto con su `registry.yml` y `framework.yml`. Para reutilizar el notebook en otro Lakehouse, reemplaza estos YAML por la configuración de ese proyecto; el paquete Python no requiere cambios.
 
 El ejemplo no incluye OFM porque no aparece en el archivo compartido. Tampoco declara un atributo `Well_ID`: las estructuras muestran `id_pozo` en AVM y `well_numeric_id` en BDP, que no se deben tratar como equivalentes sin una regla de negocio confirmada. Las columnas de coordenadas del ejemplo presentan valores numéricos escalados/no convencionales; no se mapean hasta confirmar su unidad y representación. La columna `index` de la vista del Excel se trata como índice de presentación, no como clave de negocio.
 

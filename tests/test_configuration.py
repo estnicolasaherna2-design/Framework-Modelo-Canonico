@@ -159,9 +159,9 @@ class ConfigurationTests(unittest.TestCase):
                 CanonicalRegistry(str(path))
 
     def test_example_notebooks_are_valid_json_with_parseable_code(self):
-        notebook_paths = Path("examples/notebooks").glob("*.ipynb")
-        notebooks = sorted(notebook_paths)
-        self.assertGreaterEqual(len(notebooks), 2)
+        notebooks = sorted(Path("examples/notebooks").glob("*.ipynb"))
+        notebooks.extend(sorted(Path("notebooks").glob("*.ipynb")))
+        self.assertGreaterEqual(len(notebooks), 3)
 
         for path in notebooks:
             with self.subTest(notebook=path.name):
@@ -174,6 +174,25 @@ class ConfigurationTests(unittest.TestCase):
                             "".join(cell["source"]),
                             filename=f"{path}[{index}]"
                         )
+
+    def test_operational_notebook_has_one_parameter_cell(self):
+        path = Path("notebooks/nb_create_canonical_model.ipynb")
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        parameter_cells = [
+            cell for cell in notebook["cells"]
+            if "parameters" in cell.get("metadata", {}).get("tags", [])
+        ]
+
+        self.assertEqual(len(parameter_cells), 1)
+        parameter_source = "".join(parameter_cells[0]["source"])
+        for parameter in (
+            "LAKEHOUSE_ROOT",
+            "CONFIG_RELATIVE_ROOT",
+            "ENTITY_NAME",
+            "EXECUTION_MODE",
+            "PRECHECK_ONLY"
+        ):
+            self.assertIn(parameter, parameter_source)
 
 
 if __name__ == "__main__":
