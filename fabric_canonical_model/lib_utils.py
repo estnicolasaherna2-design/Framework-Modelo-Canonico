@@ -3,16 +3,61 @@ Utilidades generales del Fabric Canonical Model Framework.
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import yaml
-
-from pyspark.sql import SparkSession
 
 from fabric_canonical_model.exceptions import ConfigurationError
 
 
-def get_spark() -> SparkSession:
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate mapping keys."""
+
+    def construct_mapping(self, node, deep=False):
+        if not isinstance(node, yaml.MappingNode):
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                "expected a mapping node",
+                node.start_mark
+            )
+
+        self.flatten_mapping(node)
+        mapping = {}
+
+        for key_node, value_node in node.value:
+            key = self.construct_object(key_node, deep=deep)
+
+            try:
+                duplicate = key in mapping
+            except TypeError as exc:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    "found an unhashable key",
+                    key_node.start_mark
+                ) from exc
+
+            if duplicate:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key {key!r}",
+                    key_node.start_mark
+                )
+
+            mapping[key] = self.construct_object(value_node, deep=deep)
+
+        return mapping
+
+
+_UniqueKeySafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _UniqueKeySafeLoader.construct_mapping
+)
+
+
+def get_spark():
     """
     Obtiene la sesion activa de Spark o crea una si no existe.
 
@@ -20,6 +65,8 @@ def get_spark() -> SparkSession:
         SparkSession: Sesion activa de Spark.
     """
     try:
+        from pyspark.sql import SparkSession
+
         return SparkSession.builder.getOrCreate()
 
     except Exception as exc:
@@ -44,7 +91,7 @@ def read_yaml_file(file_path: str) -> Dict[str, Any]:
     """
     try:
         with open(file_path, "r", encoding="utf-8") as file:
-            content = yaml.safe_load(file)
+            content = yaml.load(file, Loader=_UniqueKeySafeLoader)
 
         if content is None:
             raise ConfigurationError(
