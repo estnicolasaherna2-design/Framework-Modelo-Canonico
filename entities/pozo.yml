@@ -37,6 +37,13 @@ attributes:
       - AVM
       - BDP
 
+  - name: active_ind
+    mapping:
+      AVM: active_ind
+    strategy: SOURCE_PRIORITY
+    priority:
+      - AVM
+
 validations:
   required_columns: []
   check_duplicates: true

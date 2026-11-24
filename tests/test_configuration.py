@@ -56,6 +56,14 @@ class ConfigurationTests(unittest.TestCase):
             entity["attributes"][0]["priority"],
             ["AVM", "BDP"]
         )
+        self.assertEqual(
+            entity["attributes"][1]["mapping"],
+            {"AVM": "active_ind"}
+        )
+        self.assertEqual(
+            entity["attributes"][1]["priority"],
+            ["AVM"]
+        )
         self.assertTrue(
             all(source["watermark"]["column"] == "fecha_actualizacion"
                 for source in entity["sources"])
