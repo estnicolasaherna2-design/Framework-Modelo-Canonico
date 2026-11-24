@@ -60,6 +60,15 @@ class ConfigurationTests(unittest.TestCase):
             all(source["watermark"]["column"] == "fecha_actualizacion"
                 for source in entity["sources"])
         )
+        self.assertTrue(
+            all(
+                source["deduplication"]["order_by"] == [{
+                    "column": "fecha_actualizacion",
+                    "direction": "desc"
+                }]
+                for source in entity["sources"]
+            )
+        )
 
     def test_framework_rejects_lakehouse_names_and_unknown_properties(self):
         invalid = framework_config()

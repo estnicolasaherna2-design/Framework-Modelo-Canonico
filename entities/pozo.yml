@@ -9,6 +9,10 @@ sources:
     watermark:
       column: fecha_actualizacion
       safety_lookback_minutes: 0
+    deduplication:
+      order_by:
+        - column: fecha_actualizacion
+          direction: desc
 
   - name: BDP
     schema: curated_produccion_yacimientos_bdp
@@ -16,6 +20,10 @@ sources:
     watermark:
       column: fecha_actualizacion
       safety_lookback_minutes: 0
+    deduplication:
+      order_by:
+        - column: fecha_actualizacion
+          direction: desc
 
 business_keys:
   - uwi
