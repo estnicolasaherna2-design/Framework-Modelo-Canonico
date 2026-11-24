@@ -6,7 +6,7 @@ Resolucion de identidad e integracion de entidades canonicas.
 from functools import reduce
 from typing import Any, Dict, List, Optional
 
-from pyspark.sql import DataFrame, Window
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
 from fabric_canonical_model.exceptions import EntityResolutionError
@@ -131,8 +131,8 @@ class EntityResolver:
     def validate_source_deduplication_config(
         source_names: List[str],
         source_deduplication: Optional[Dict[str, Any]]
-    ) -> Dict[str, List[Dict[str, str]]]:
-        """Valida y normaliza las reglas de desempate por fuente."""
+    ) -> Dict[str, str]:
+        """Valida las fuentes configuradas para DISTINCT por clave."""
 
         if source_deduplication is None:
             return {}
@@ -170,59 +170,16 @@ class EntityResolver:
 
         normalized = {}
         for source_name, config in source_deduplication.items():
-            if not isinstance(config, dict) or set(config) != {"order_by"}:
+            if (
+                not isinstance(config, dict)
+                or set(config) != {"strategy"}
+                or config["strategy"] != "DISTINCT"
+            ):
                 raise EntityResolutionError(
                     f"source_deduplication.{source_name} debe contener "
-                    "únicamente order_by."
+                    "strategy: DISTINCT."
                 )
-
-            order_by = config["order_by"]
-            if not isinstance(order_by, list) or not order_by:
-                raise EntityResolutionError(
-                    f"source_deduplication.{source_name}.order_by "
-                    "debe ser una lista no vacía."
-                )
-
-            normalized_order = []
-            seen_columns = set()
-            for index, item in enumerate(order_by):
-                if (
-                    not isinstance(item, dict)
-                    or set(item) != {"column", "direction"}
-                ):
-                    raise EntityResolutionError(
-                        f"source_deduplication.{source_name}.order_by"
-                        f"[{index}] debe definir column y direction."
-                    )
-
-                column = item["column"]
-                direction = item["direction"]
-                if not isinstance(column, str) or not column.strip():
-                    raise EntityResolutionError(
-                        f"source_deduplication.{source_name}.order_by"
-                        f"[{index}].column debe ser un nombre válido."
-                    )
-                if column in seen_columns:
-                    raise EntityResolutionError(
-                        f"source_deduplication.{source_name}.order_by "
-                        f"repite la columna '{column}'."
-                    )
-                if not isinstance(direction, str) or direction.lower() not in {
-                    "asc",
-                    "desc"
-                }:
-                    raise EntityResolutionError(
-                        f"source_deduplication.{source_name}.order_by"
-                        f"[{index}].direction debe ser asc o desc."
-                    )
-
-                seen_columns.add(column)
-                normalized_order.append({
-                    "column": column,
-                    "direction": direction.lower()
-                })
-
-            normalized[source_name] = normalized_order
+            normalized[source_name] = "DISTINCT"
 
         return normalized
 
@@ -233,7 +190,7 @@ class EntityResolver:
         source_deduplication: Optional[Dict[str, Any]] = None,
         source_mapping: Optional[Dict[str, Dict[str, str]]] = None
     ) -> Dict[str, DataFrame]:
-        """Conserva la fila más reciente y no ambigua por clave de fuente."""
+        """Conserva una fila por clave de negocio en fuentes configuradas."""
 
         rules = EntityResolver.validate_source_deduplication_config(
             list(dataframes),
@@ -242,84 +199,27 @@ class EntityResolver:
         if not rules:
             return dataframes
 
+        EntityResolver._validate_sources(dataframes)
+        EntityResolver._validate_business_keys(
+            dataframes,
+            business_keys,
+            source_mapping
+        )
         source_mapping = source_mapping or {}
         result = dict(dataframes)
 
-        for source_name, order_by in rules.items():
+        for source_name in rules:
             dataframe = dataframes[source_name]
             key_columns = [
                 source_mapping.get(source_name, {}).get(key, key)
                 for key in business_keys
             ]
-            order_columns = [item["column"] for item in order_by]
-            missing_columns = (
-                set(key_columns + order_columns) - set(dataframe.columns)
-            )
-            if missing_columns:
+            if len(key_columns) != len(set(key_columns)):
                 raise EntityResolutionError(
-                    f"La deduplicación de la fuente '{source_name}' "
-                    f"referencia columnas inexistentes: {sorted(missing_columns)}."
+                    f"La fuente '{source_name}' mapea varias claves de "
+                    "negocio a la misma columna física."
                 )
-            if set(key_columns) & set(order_columns):
-                raise EntityResolutionError(
-                    f"La deduplicación de la fuente '{source_name}' debe "
-                    "ordenar por columnas distintas de las claves de negocio."
-                )
-
-            deduplicated_rows = dataframe.dropDuplicates(dataframe.columns)
-            window = Window.partitionBy(*key_columns).orderBy(
-                *[
-                    (
-                        F.col(f"`{item['column']}`").asc_nulls_last()
-                        if item["direction"] == "asc"
-                        else F.col(f"`{item['column']}`").desc_nulls_last()
-                    )
-                    for item in order_by
-                ]
-            )
-            rank_column = "__fcm_dedup_rank"
-            while rank_column in dataframe.columns:
-                rank_column = f"_{rank_column}"
-
-            ranked = deduplicated_rows.withColumn(
-                rank_column,
-                F.dense_rank().over(window)
-            )
-            valid_keys = reduce(
-                lambda left, right: left & right,
-                [F.col(f"`{key}`").isNotNull() for key in key_columns]
-            )
-            ambiguous = (
-                ranked
-                .filter((F.col(rank_column) == 1) & valid_keys)
-                .groupBy(*key_columns)
-                .count()
-                .filter(F.col("count") > 1)
-            )
-            if ambiguous.limit(1).count() > 0:
-                examples = [
-                    row.asDict()
-                    for row in ambiguous.limit(5).collect()
-                ]
-                raise EntityResolutionError(
-                    f"La fuente '{source_name}' tiene filas distintas "
-                    "empatadas en sus columnas de deduplicación para la "
-                    f"misma clave de negocio. Ejemplos: {examples}. "
-                    "Agregue un criterio de desempate a order_by."
-                )
-
-            row_number_column = "__fcm_dedup_row_number"
-            while row_number_column in ranked.columns:
-                row_number_column = f"_{row_number_column}"
-            result[source_name] = (
-                ranked
-                .withColumn(
-                    row_number_column,
-                    F.row_number().over(window)
-                )
-                .filter(F.col(row_number_column) == 1)
-                .drop(rank_column, row_number_column)
-            )
+            result[source_name] = dataframe.dropDuplicates(key_columns)
 
         return result
 
@@ -933,8 +833,8 @@ class EntityResolver:
                 no nulo. Si existen conflictos, detiene el proceso.
 
         source_deduplication:
-            Reglas opcionales por fuente para elegir el registro más
-            reciente por clave. Empates entre filas distintas fallan.
+            Configuración opcional por fuente para aplicar DISTINCT sobre
+            las claves de negocio antes de resolver atributos.
         """
 
         self._validate_sources(dataframes)

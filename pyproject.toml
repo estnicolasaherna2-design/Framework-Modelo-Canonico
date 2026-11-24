@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fabric-canonical-model-framework"
-version = "0.1.1"
+version = "0.1.2"
 description = "Framework metadata-driven para la construccion de modelos canonicos en Microsoft Fabric."
 readme = "README.md"
 requires-python = ">=3.10"

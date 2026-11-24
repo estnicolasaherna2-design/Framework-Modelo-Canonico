@@ -62,10 +62,7 @@ class ConfigurationTests(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                source["deduplication"]["order_by"] == [{
-                    "column": "fecha_actualizacion",
-                    "direction": "desc"
-                }]
+                source["deduplication"]["strategy"] == "DISTINCT"
                 for source in entity["sources"]
             )
         )
