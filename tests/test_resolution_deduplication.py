@@ -6,11 +6,13 @@ from fabric_canonical_model.exceptions import EntityResolutionError
 try:
     from pyspark.sql import SparkSession
 
+    from fabric_canonical_model.lib_mapping import AttributeMapper
     from fabric_canonical_model.lib_resolution import EntityResolver
 except ModuleNotFoundError as exc:
     if exc.name != "pyspark" and not exc.name.startswith("pyspark."):
         raise
     SparkSession = None
+    AttributeMapper = None
     EntityResolver = None
 
 
@@ -110,6 +112,71 @@ class SourceDeduplicationTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["uwi"], "W1")
         self.assertIn(rows[0]["Well_Name"], {"AVM valor A", "AVM valor B"})
+
+    def test_source_mapping_uses_fallback_column_and_keeps_non_null_transaction(self):
+        source = self.spark.createDataFrame(
+            [
+                ("W1", None, None),
+                ("W1", None, "Plot name")
+            ],
+            schema="uwi string, well_name string, plot_name string"
+        )
+        mapped = AttributeMapper().map_source(
+            dataframe=source,
+            source_name="BDP",
+            attributes_config=[{
+                "name": "Well_Name",
+                "type": "string",
+                "mapping": {
+                    "BDP": ["well_name", "plot_name"]
+                }
+            }],
+            include_unmapped=True
+        )
+
+        deduplicated = EntityResolver.deduplicate_sources(
+            dataframes={"BDP": mapped},
+            business_keys=["uwi"],
+            source_deduplication={
+                "BDP": {"strategy": "DISTINCT"}
+            }
+        )
+
+        rows = deduplicated["BDP"].select("uwi", "Well_Name").collect()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["Well_Name"], "Plot name")
+
+    def test_priority_controls_other_source_fallback_or_null(self):
+        sources = {
+            "BDP": self._source([
+                ("W1", None, datetime(2025, 1, 1))
+            ]),
+            "AVM": self._source([
+                ("W1", "AVM name", datetime(2025, 1, 1))
+            ])
+        }
+        attribute = {
+            "name": "Well_Name",
+            "strategy": "SOURCE_PRIORITY",
+            "priority": ["BDP", "AVM"]
+        }
+        with_fallback = EntityResolver().resolve_entity(
+            dataframes=sources,
+            business_keys=["uwi"],
+            attributes_config=[attribute]
+        )
+        without_fallback = EntityResolver().resolve_entity(
+            dataframes=sources,
+            business_keys=["uwi"],
+            attributes_config=[{
+                "name": "Well_Name",
+                "strategy": "SOURCE_PRIORITY",
+                "priority": ["BDP"]
+            }]
+        )
+
+        self.assertEqual(with_fallback.first()["Well_Name"], "AVM name")
+        self.assertIsNone(without_fallback.first()["Well_Name"])
 
     def test_deduplication_config_rejects_undeclared_sources(self):
         with self.assertRaisesRegex(

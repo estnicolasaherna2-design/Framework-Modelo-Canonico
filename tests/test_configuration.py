@@ -50,7 +50,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(entity["business_keys"], ["uwi"])
         self.assertEqual(
             entity["attributes"][0]["mapping"],
-            {"AVM": "nombre", "BDP": "well_name"}
+            {"AVM": "nombre", "BDP": ["well_name", "plot_name"]}
         )
         self.assertEqual(
             entity["attributes"][0]["priority"],

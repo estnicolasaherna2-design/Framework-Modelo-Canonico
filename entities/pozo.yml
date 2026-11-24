@@ -29,7 +29,9 @@ attributes:
     type: string
     mapping:
       AVM: nombre
-      BDP: well_name
+      BDP:
+        - well_name
+        - plot_name
     strategy: SOURCE_PRIORITY
     priority:
       - AVM

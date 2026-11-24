@@ -20,6 +20,44 @@ class AttributeMapper:
     def __init__(self):
         pass
 
+    @staticmethod
+    def _get_mapping_columns(
+        source_column: Any,
+        canonical_name: str,
+        source_name: str
+    ) -> List[str]:
+        """Normaliza un mapping sencillo o una lista ordenada de fallback."""
+
+        if source_column is None:
+            return []
+
+        columns = (
+            [source_column]
+            if isinstance(source_column, str)
+            else source_column
+        )
+        if (
+            not isinstance(columns, list)
+            or not columns
+            or any(
+                not isinstance(column, str) or not column.strip()
+                for column in columns
+            )
+        ):
+            raise ValidationError(
+                f"El mapping del atributo '{canonical_name}' en la fuente "
+                f"'{source_name}' debe ser un nombre o una lista ordenada "
+                "de nombres de columna válidos."
+            )
+
+        if len(columns) != len(set(columns)):
+            raise ValidationError(
+                f"El mapping del atributo '{canonical_name}' en la fuente "
+                f"'{source_name}' contiene columnas repetidas."
+            )
+
+        return columns
+
     # ---------------------------------------------------------
     # VALIDACION DE CONFIGURACION
     # ---------------------------------------------------------
@@ -82,18 +120,11 @@ class AttributeMapper:
                         "contiene una fuente con nombre invalido."
                     )
 
-                if (
-                    source_column is not None
-                    and (
-                        not isinstance(source_column, str)
-                        or not source_column.strip()
-                    )
-                ):
-                    raise ValidationError(
-                        f"El mapping del atributo '{canonical_name}' "
-                        f"en la fuente '{source_name}' "
-                        "contiene una columna invalida."
-                    )
+                AttributeMapper._get_mapping_columns(
+                    source_column,
+                    canonical_name,
+                    source_name
+                )
 
             data_type = attribute.get("type")
 
@@ -166,17 +197,22 @@ class AttributeMapper:
             canonical_name = attribute["name"]
             mappings = attribute.get("mapping", {})
 
-            source_column = mappings.get(source_name)
+            source_columns = AttributeMapper._get_mapping_columns(
+                mappings.get(source_name),
+                canonical_name,
+                source_name
+            )
 
-            if source_column is None:
+            if not source_columns:
                 continue
 
-            if source_column not in dataframe.columns:
-                raise ValidationError(
-                    f"La columna '{source_column}' del atributo "
-                    f"'{canonical_name}' no existe en "
-                    f"la fuente '{source_name}'."
-                )
+            for source_column in source_columns:
+                if source_column not in dataframe.columns:
+                    raise ValidationError(
+                        f"La columna '{source_column}' del atributo "
+                        f"'{canonical_name}' no existe en "
+                        f"la fuente '{source_name}'."
+                    )
 
     @staticmethod
     def _validate_source_column_collisions(
@@ -193,29 +229,28 @@ class AttributeMapper:
         for attribute in attributes_config:
 
             canonical_name = attribute["name"]
-            source_column = attribute.get(
-                "mapping",
-                {}
-            ).get(source_name)
+            source_columns = AttributeMapper._get_mapping_columns(
+                attribute.get("mapping", {}).get(source_name),
+                canonical_name,
+                source_name
+            )
 
-            if source_column is None:
-                continue
+            for source_column in source_columns:
+                normalized_column = source_column.lower()
 
-            normalized_column = source_column.lower()
+                if normalized_column in mapped_columns:
 
-            if normalized_column in mapped_columns:
+                    previous_attribute = mapped_columns[
+                        normalized_column
+                    ]
 
-                previous_attribute = mapped_columns[
-                    normalized_column
-                ]
+                    raise ValidationError(
+                        f"La columna '{source_column}' de la fuente "
+                        f"'{source_name}' esta asignada a los atributos "
+                        f"'{previous_attribute}' y '{canonical_name}'."
+                    )
 
-                raise ValidationError(
-                    f"La columna '{source_column}' de la fuente "
-                    f"'{source_name}' esta asignada a los atributos "
-                    f"'{previous_attribute}' y '{canonical_name}'."
-                )
-
-            mapped_columns[normalized_column] = canonical_name
+                mapped_columns[normalized_column] = canonical_name
 
     # ---------------------------------------------------------
     # MAPEO DE UNA FUENTE
@@ -276,9 +311,13 @@ class AttributeMapper:
 
             mappings = attribute.get("mapping", {})
 
-            source_column = mappings.get(source_name)
+            source_columns = self._get_mapping_columns(
+                mappings.get(source_name),
+                canonical_name,
+                source_name
+            )
 
-            if source_column is None:
+            if not source_columns:
                 continue
 
             if canonical_name.lower() in canonical_columns:
@@ -287,8 +326,11 @@ class AttributeMapper:
                     "esta duplicado."
                 )
 
-            expression = F.col(
-                f"`{source_column}`"
+            expression = F.coalesce(
+                *[
+                    F.col(f"`{source_column}`")
+                    for source_column in source_columns
+                ]
             )
 
             data_type = attribute.get("type")
@@ -312,8 +354,9 @@ class AttributeMapper:
                 expression.alias(canonical_name)
             )
 
-            mapped_columns.add(
+            mapped_columns.update(
                 source_column.lower()
+                for source_column in source_columns
             )
 
             canonical_columns.add(

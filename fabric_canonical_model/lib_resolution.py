@@ -190,7 +190,7 @@ class EntityResolver:
         source_deduplication: Optional[Dict[str, Any]] = None,
         source_mapping: Optional[Dict[str, Dict[str, str]]] = None
     ) -> Dict[str, DataFrame]:
-        """Conserva una fila por clave de negocio en fuentes configuradas."""
+        """Consolida una fila por clave y conserva valores no nulos."""
 
         rules = EntityResolver.validate_source_deduplication_config(
             list(dataframes),
@@ -219,7 +219,27 @@ class EntityResolver:
                     f"La fuente '{source_name}' mapea varias claves de "
                     "negocio a la misma columna física."
                 )
-            result[source_name] = dataframe.dropDuplicates(key_columns)
+            value_columns = [
+                column
+                for column in dataframe.columns
+                if column not in key_columns
+            ]
+            if value_columns:
+                result[source_name] = dataframe.groupBy(
+                    *key_columns
+                ).agg(
+                    *[
+                        F.first(
+                            F.col(f"`{column}`"),
+                            ignorenulls=True
+                        ).alias(column)
+                        for column in value_columns
+                    ]
+                )
+            else:
+                result[source_name] = dataframe.select(
+                    *key_columns
+                ).dropDuplicates(key_columns)
 
         return result
 
