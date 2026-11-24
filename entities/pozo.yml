@@ -1,0 +1,44 @@
+name: pozo
+description: >
+  Entidad canonica de pozos integrada desde las fuentes Curated AVM y BDP.
+
+sources:
+  - name: AVM
+    schema: curated_produccion_yacimientos_avm
+    table: avm_pozos_ubicacion
+    watermark:
+      column: fecha_actualizacion
+      safety_lookback_minutes: 0
+
+  - name: BDP
+    schema: curated_produccion_yacimientos_bdp
+    table: bdp_well
+    watermark:
+      column: fecha_actualizacion
+      safety_lookback_minutes: 0
+
+business_keys:
+  - uwi
+
+attributes:
+  - name: Well_Name
+    type: string
+    mapping:
+      AVM: nombre
+      BDP: well_name
+    strategy: SOURCE_PRIORITY
+    priority:
+      - AVM
+      - BDP
+
+validations:
+  required_columns:
+    - Well_Name
+  check_duplicates: true
+  custom_rules: []
+
+transformations: []
+
+persistence:
+  strategy: UPSERT
+  table_name: pozo

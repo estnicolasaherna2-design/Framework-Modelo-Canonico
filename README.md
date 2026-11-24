@@ -158,6 +158,24 @@ La ejecución del framework se centralizará mediante un notebook transversal:
 
 Este notebook invocará el motor de construcción y permitirá seleccionar las entidades y estrategias de procesamiento.
 
+## 12.1. Notebooks de ejemplo
+
+Hay tres notebooks en `examples/notebooks/`:
+
+- `nb_framework_components_demo.ipynb`: utiliza datos sintéticos para probar mapping, resolución, transformaciones y validaciones sin leer ni escribir tablas del Lakehouse.
+- `nb_execute_registered_entities.ipynb`: carga framework y registry desde el Lakehouse adjunto, ejecuta un precheck ilustrativo y muestra cómo conectar las entidades habilitadas al motor. La ejecución de escritura está protegida por `RUN_EXECUTION = False`.
+- `nb_fabric_integration_tests.ipynb`: ejecuta pruebas Delta de `FULL_LOAD`, `UPSERT`, `SCD2`, auditoría y watermarks en un schema de prueba único. Deja las tablas de prueba para su inspección y limpieza manual.
+
+Instale el wheel en el Environment de Fabric y adjunte el Lakehouse que contiene `Files/CanonicalModel/config/` antes de abrir los ejemplos. El notebook de ejecución requiere YAML de entidad completos y tablas Curated existentes. Es una plantilla basada en las interfaces actuales; lee las fuentes completas y no implementa watermarks ni procesamiento incremental. Su precheck no sustituye la validación central de configuraciones requerida para producción.
+
+Las pruebas unitarias disponibles se ejecutan desde la raíz del repositorio con `python -m unittest discover -s tests -v`. Las pruebas Delta requieren ejecutar el notebook de integración en Fabric; no modifican ni eliminan tablas de negocio.
+
+## 12.2. Ejemplo de entidad `pozo`
+
+La configuración de ejemplo está en `entities/pozo.yml` y usa las hojas compartidas como fuentes `AVM` (`avm_pozos_ubicacion`) y `BDP` (`bdp_well`), con `uwi` como clave y `fecha_actualizacion` como watermark independiente por fuente. `Well_Name` se resuelve en orden AVM y luego BDP. Al desplegarla, ubíquela en `Files/CanonicalModel/config/entities/pozo.yml`, junto con el `registry.yml`.
+
+El ejemplo no incluye OFM porque no aparece en el archivo compartido. Tampoco declara un atributo `Well_ID`: las estructuras muestran `id_pozo` en AVM y `well_numeric_id` en BDP, que no se deben tratar como equivalentes sin una regla de negocio confirmada. Las columnas de coordenadas del ejemplo presentan valores numéricos escalados/no convencionales; no se mapean hasta confirmar su unidad y representación. La columna `index` de la vista del Excel se trata como índice de presentación, no como clave de negocio.
+
 ## 13. Principios de diseño
 
 - Separación entre ingesta, preparación y construcción del modelo canónico.
