@@ -1,0 +1,26 @@
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fabric-canonical-model-framework"
+version = "0.1.0"
+description = "Framework metadata-driven para la construccion de modelos canonicos en Microsoft Fabric."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+
+authors = [
+    { name = "Nicolas Hernandez" }
+]
+
+dependencies = [
+    "PyYAML>=6.0"
+]
+
+[tool.setuptools]
+packages = ["fabric_canonical_model"]
+
+[tool.setuptools.package-data]
+fabric_canonical_model = ["*.yml", "*.yaml"]

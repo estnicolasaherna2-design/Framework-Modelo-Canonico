@@ -1,0 +1,16 @@
+canonical_model:
+  name: canonical_model
+  version: "1.0.0"
+
+  entities:
+    - name: pozo
+      enabled: true
+      config: entities/pozo.yml
+
+    - name: campo
+      enabled: false
+      config: entities/campo.yml
+
+    - name: yacimiento
+      enabled: false
+      config: entities/yacimiento.yml

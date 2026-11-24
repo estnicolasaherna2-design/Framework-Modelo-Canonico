@@ -1,0 +1,17 @@
+
+framework:
+  name: fabric_canonical_model_framework
+  version: "0.1.0"
+
+  execution:
+    default_mode: UPSERT
+    timezone: America/Bogota
+
+  paths:
+    config_root: Files/CanonicalModel/config
+    registry: Files/CanonicalModel/config/registry.yml
+    entities: Files/CanonicalModel/config/entities
+
+  schemas:
+    canonical: canonical
+    metadata: canonical_metadata
