@@ -66,6 +66,10 @@ class ConfigurationTests(unittest.TestCase):
                 for source in entity["sources"]
             )
         )
+        self.assertNotIn(
+            "Well_Name",
+            entity.get("validations", {}).get("required_columns", [])
+        )
 
     def test_framework_rejects_lakehouse_names_and_unknown_properties(self):
         invalid = framework_config()

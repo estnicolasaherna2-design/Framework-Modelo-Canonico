@@ -36,8 +36,7 @@ attributes:
       - BDP
 
 validations:
-  required_columns:
-    - Well_Name
+  required_columns: []
   check_duplicates: true
   custom_rules: []
 
